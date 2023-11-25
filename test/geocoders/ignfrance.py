@@ -1,37 +1,18 @@
 import pytest
-from async_generator import async_generator, yield_
 
-from geopy.exc import ConfigurationError, GeocoderQueryError
+from geopy.exc import GeocoderQueryError
 from geopy.geocoders import IGNFrance
-from test.geocoders.util import BaseTestGeocoder, env
+from test.geocoders.util import BaseTestGeocoder
 from test.proxy_server import ProxyServerThread
 
 
-class TestUnitIGNFrance:
+class TestIGNFrance(BaseTestGeocoder):
 
-    def test_user_agent_custom(self):
-        geocoder = IGNFrance(
-            api_key='DUMMYKEY1234',
-            username='MUSTERMANN',
-            password='tops3cr3t',
-            user_agent='my_user_agent/1.0'
+    @classmethod
+    def make_geocoder(cls, **kwargs):
+        return IGNFrance(
+            timeout=10
         )
-        assert geocoder.headers['User-Agent'] == 'my_user_agent/1.0'
-
-    def test_invalid_auth_1(self):
-        with pytest.raises(ConfigurationError):
-            IGNFrance(api_key="a")
-
-    def test_invalid_auth_2(self):
-        with pytest.raises(ConfigurationError):
-            IGNFrance(api_key="a", username="b", referer="c")
-
-    def test_invalid_auth_3(self):
-        with pytest.raises(ConfigurationError):
-            IGNFrance(api_key="a", username="b")
-
-
-class BaseTestIGNFrance(BaseTestGeocoder):
 
     async def test_invalid_query_type(self):
         with pytest.raises(GeocoderQueryError):
@@ -148,10 +129,10 @@ class BaseTestIGNFrance(BaseTestGeocoder):
         )
 
         departements_no_spatial = list(
-            set([
+            {
                 i.raw['departement']
                 for i in res_no_spatial_filter
-            ])
+            }
         )
 
         assert len(departements_no_spatial) > len(departements_spatial)
@@ -204,40 +185,16 @@ class BaseTestIGNFrance(BaseTestGeocoder):
             {},
         )
 
-        coordinates_couples_radius = set([
+        coordinates_couples_radius = {
             (str(location.latitude) + ' ' + str(location.longitude))
             for location in res_call_radius
-        ])
-        coordinates_couples = set([
+        }
+        coordinates_couples = {
             (str(location.latitude) + ' ' + str(location.longitude))
             for location in res_call
-        ])
+        }
 
         assert coordinates_couples_radius.issubset(coordinates_couples)
-
-
-class TestIGNFranceApiKeyAuth(BaseTestIGNFrance):
-
-    @classmethod
-    def make_geocoder(cls, **kwargs):
-        return IGNFrance(
-            api_key=env['IGNFRANCE_KEY'],
-            referer=env['IGNFRANCE_REFERER'],
-            timeout=10
-        )
-
-
-class TestIGNFranceUsernameAuth(BaseTestIGNFrance):
-
-    @classmethod
-    def make_geocoder(cls, **kwargs):
-        return IGNFrance(
-            api_key=env['IGNFRANCE_USERNAME_KEY'],
-            username=env['IGNFRANCE_USERNAME'],
-            password=env['IGNFRANCE_PASSWORD'],
-            timeout=10,
-            **kwargs
-        )
 
 
 class TestIGNFranceUsernameAuthProxy(BaseTestGeocoder):
@@ -246,22 +203,18 @@ class TestIGNFranceUsernameAuthProxy(BaseTestGeocoder):
     @classmethod
     def make_geocoder(cls, **kwargs):
         return IGNFrance(
-            api_key=env['IGNFRANCE_USERNAME_KEY'],
-            username=env['IGNFRANCE_USERNAME'],
-            password=env['IGNFRANCE_PASSWORD'],
             timeout=10,
             **kwargs
         )
 
     @pytest.fixture(scope='class', autouse=True)
-    @async_generator
     async def start_proxy(_, request, class_geocoder):
         cls = request.cls
         cls.proxy_server = ProxyServerThread(timeout=cls.proxy_timeout)
         cls.proxy_server.start()
         cls.proxy_url = cls.proxy_server.get_proxy_url()
         async with cls.inject_geocoder(cls.make_geocoder(proxies=cls.proxy_url)):
-            await yield_()
+            yield
         cls.proxy_server.stop()
         cls.proxy_server.join()
 

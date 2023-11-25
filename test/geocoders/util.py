@@ -1,10 +1,10 @@
+import contextlib
 import json
 import os
 from abc import ABC, abstractmethod
 from unittest.mock import ANY, patch
 
 import pytest
-from async_generator import async_generator, asynccontextmanager, yield_
 
 from geopy import exc
 from geopy.adapters import BaseAsyncAdapter
@@ -14,7 +14,7 @@ _env = {}
 try:
     with open(".test_keys") as fp:
         _env.update(json.loads(fp.read()))
-except IOError:
+except OSError:
     _env.update(os.environ)
 
 
@@ -25,7 +25,7 @@ class SkipIfMissingEnv(dict):
 
     def __getitem__(self, key):
         assert self.is_internet_access_allowed is not None
-        if key not in self:
+        if key not in self or not super().__getitem__(key):
             if self.is_internet_access_allowed:
                 pytest.skip("Missing geocoder credential: %s" % (key,))
             else:
@@ -47,7 +47,6 @@ class BaseTestGeocoder(ABC):
     delta = 0.5
 
     @pytest.fixture(scope='class', autouse=True)
-    @async_generator
     async def class_geocoder(_, request, patch_adapter, is_internet_access_allowed):
         """Prepare a class-level Geocoder instance."""
         cls = request.cls
@@ -59,13 +58,12 @@ class BaseTestGeocoder(ABC):
         run_async = isinstance(geocoder.adapter, BaseAsyncAdapter)
         if run_async:
             async with geocoder:
-                await yield_(geocoder)
+                yield geocoder
         else:
-            await yield_(geocoder)
+            yield geocoder
 
     @classmethod
-    @asynccontextmanager
-    @async_generator
+    @contextlib.asynccontextmanager
     async def inject_geocoder(cls, geocoder):
         """An async context manager allowing to inject a custom
         geocoder instance in a single test method which will
@@ -75,9 +73,9 @@ class BaseTestGeocoder(ABC):
             run_async = isinstance(geocoder.adapter, BaseAsyncAdapter)
             if run_async:
                 async with geocoder:
-                    await yield_(geocoder)
+                    yield geocoder
             else:
-                await yield_(geocoder)
+                yield geocoder
 
     @pytest.fixture(autouse=True)
     def ensure_no_geocoder_assignment(self):

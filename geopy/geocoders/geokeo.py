@@ -1,27 +1,37 @@
 from functools import partial
 from urllib.parse import urlencode
 
+from geopy.exc import (
+    GeocoderAuthenticationFailure,
+    GeocoderQueryError,
+    GeocoderQuotaExceeded,
+    GeocoderServiceError,
+    GeocoderUnavailable,
+)
 from geopy.geocoders.base import DEFAULT_SENTINEL, Geocoder
 from geopy.location import Location
 from geopy.util import logger
 
-__all__ = ("BANFrance", )
+__all__ = ("Geokeo", )
 
 
-class BANFrance(Geocoder):
-    """Geocoder using the Base Adresse Nationale France API.
+class Geokeo(Geocoder):
+    """Geocoder using the geokeo API.
 
     Documentation at:
-        https://adresse.data.gouv.fr/api
+        https://geokeo.com/documentation.php
+
+    .. versionadded:: 2.4
     """
 
-    geocode_path = '/search'
-    reverse_path = '/reverse'
+    geocode_path = '/geocode/v1/search.php'
+    reverse_path = '/geocode/v1/reverse.php'
 
     def __init__(
             self,
+            api_key,
             *,
-            domain='api-adresse.data.gouv.fr',
+            domain='geokeo.com',
             scheme=None,
             timeout=DEFAULT_SENTINEL,
             proxies=DEFAULT_SENTINEL,
@@ -31,8 +41,12 @@ class BANFrance(Geocoder):
     ):
         """
 
-        :param str domain: Currently it is ``'api-adresse.data.gouv.fr'``, can
-            be changed for testing purposes.
+        :param str api_key: The API key required by Geokeo.com
+            to perform geocoding requests. You can get your key here:
+            https://geokeo.com/
+
+        :param str domain: Domain where the target Geokeo service
+            is hosted.
 
         :param str scheme:
             See :attr:`geopy.geocoders.options.default_scheme`.
@@ -53,8 +67,6 @@ class BANFrance(Geocoder):
         :param callable adapter_factory:
             See :attr:`geopy.geocoders.options.default_adapter_factory`.
 
-            .. versionadded:: 2.0
-
         """
         super().__init__(
             scheme=scheme,
@@ -64,20 +76,17 @@ class BANFrance(Geocoder):
             ssl_context=ssl_context,
             adapter_factory=adapter_factory,
         )
-        self.domain = domain.strip('/')
 
-        self.geocode_api = (
-            '%s://%s%s' % (self.scheme, self.domain, self.geocode_path)
-        )
-        self.reverse_api = (
-            '%s://%s%s' % (self.scheme, self.domain, self.reverse_path)
-        )
+        self.api_key = api_key
+        self.domain = domain.strip('/')
+        self.api = '%s://%s%s' % (self.scheme, self.domain, self.geocode_path)
+        self.reverse_api = '%s://%s%s' % (self.scheme, self.domain, self.reverse_path)
 
     def geocode(
             self,
             query,
             *,
-            limit=None,
+            country=None,
             exactly_one=True,
             timeout=DEFAULT_SENTINEL
     ):
@@ -86,10 +95,9 @@ class BANFrance(Geocoder):
 
         :param str query: The address or query you wish to geocode.
 
-        :param int limit: Defines the maximum number of items in the
-            response structure. If not provided and there are multiple
-            results the BAN API will return 5 results by default.
-            This will be reset to one if ``exactly_one`` is True.
+        :param str country: Restricts the results to the specified
+            country. The country code is a 2 character code as
+            defined by the ISO 3166-1 Alpha 2 standard (e.g. ``us``).
 
         :param bool exactly_one: Return one result or a list of results, if
             available.
@@ -101,17 +109,16 @@ class BANFrance(Geocoder):
 
         :rtype: ``None``, :class:`geopy.location.Location` or a list of them, if
             ``exactly_one=False``.
-
         """
-
         params = {
+            'api': self.api_key,
             'q': query,
         }
 
-        if limit is not None:
-            params['limit'] = limit
+        if country:
+            params['country'] = country
 
-        url = "?".join((self.geocode_api, urlencode(params)))
+        url = "?".join((self.api, urlencode(params)))
 
         logger.debug("%s.geocode: %s", self.__class__.__name__, url)
         callback = partial(self._parse_json, exactly_one=exactly_one)
@@ -142,39 +149,60 @@ class BANFrance(Geocoder):
 
         :rtype: ``None``, :class:`geopy.location.Location` or a list of them, if
             ``exactly_one=False``.
-
         """
 
         try:
-            lat, lon = self._coerce_point_to_string(query).split(',')
+            lat, lng = self._coerce_point_to_string(query).split(',')
         except ValueError:
             raise ValueError("Must be a coordinate pair or Point")
 
         params = {
+            'api': self.api_key,
             'lat': lat,
-            'lon': lon,
+            'lng': lng
         }
 
         url = "?".join((self.reverse_api, urlencode(params)))
+
         logger.debug("%s.reverse: %s", self.__class__.__name__, url)
         callback = partial(self._parse_json, exactly_one=exactly_one)
         return self._call_geocoder(url, callback, timeout=timeout)
 
-    def _parse_feature(self, feature):
-        # Parse each resource.
-        latitude = feature.get('geometry', {}).get('coordinates', [])[1]
-        longitude = feature.get('geometry', {}).get('coordinates', [])[0]
-        placename = feature.get('properties', {}).get('label')
-
-        return Location(placename, (latitude, longitude), feature)
-
-    def _parse_json(self, response, exactly_one):
-        if response is None or 'features' not in response:
+    def _parse_json(self, page, exactly_one=True):
+        places = page.get('results', [])
+        self._check_status(page)
+        if not places:
             return None
-        features = response['features']
-        if not len(features):
-            return None
+
+        def parse_place(place):
+            '''Get the location, lat, lng from a single json place.'''
+            location = place.get('formatted_address')
+            latitude = place['geometry']['location']['lat']
+            longitude = place['geometry']['location']['lng']
+            return Location(location, (latitude, longitude), place)
+
         if exactly_one:
-            return self._parse_feature(features[0])
+            return parse_place(places[0])
         else:
-            return [self._parse_feature(feature) for feature in features]
+            return [parse_place(place) for place in places]
+
+    def _check_status(self, page):
+        status = (page.get("status") or "").upper()
+
+        # https://geokeo.com/documentation.php#responsecodes
+        if status == "OK":
+            return
+        if status == 'ZERO_RESULTS':
+            return
+
+        if status == 'INVALID_REQUEST':
+            raise GeocoderQueryError('Invalid request parameters')
+        elif status == "ACCESS_DENIED":
+            raise GeocoderAuthenticationFailure('Access denied')
+        elif status == "OVER_QUERY_LIMIT":
+            raise GeocoderQuotaExceeded('Over query limit')
+        elif status == "INTERNAL_SERVER_ERROR":  # not documented
+            raise GeocoderUnavailable('Internal server error')
+        else:
+            # Unknown (undocumented) status.
+            raise GeocoderServiceError('Unknown error')

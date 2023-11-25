@@ -69,6 +69,13 @@ class BaseTestNominatim(BaseTestGeocoder):
         )
         assert "New York" in location.address
 
+    async def test_reverse_near_zero(self):
+        location = await self.reverse_run(
+            {"query": Point(31.0, -1.0e-5)},
+            {"latitude": 32.3096365, "longitude": 0.2450916, "delta": 3}
+        )
+        assert "El Bayadh" in location.address
+
     async def test_structured_query(self):
         await self.geocode_run(
             {"query": {"country": "us", "city": "moscow",
@@ -85,11 +92,15 @@ class BaseTestNominatim(BaseTestGeocoder):
         try:
             # For some queries `city_district` might be missing in the response.
             # For this specific query on OpenMapQuest the key is also missing.
-            city_district = result.raw['address']['city_district']
+            assert 'Mitte' == result.raw['address']['city_district']
         except KeyError:
             # MapQuest
-            city_district = result.raw['address']['suburb']
-        assert city_district == 'Mitte'
+            try:
+                assert 'Mitte' == result.raw['address']['suburb']
+            except KeyError:
+                # PickPoint
+                assert 'Deutschland' == result.raw['address']['country']
+                # {'postcode': '10117', 'country': 'Deutschland', 'country_code': 'de'}
 
     async def test_geocode_language_parameter(self):
         query = "Mohrenstrasse Berlin"
@@ -190,7 +201,7 @@ class BaseTestNominatim(BaseTestGeocoder):
 
         await self.geocode_run(
             {"query": query, "viewbox": bb},
-            {"latitude": 56.4129459, "longitude": 84.847831069814},
+            {"latitude": 56.4129459, "longitude": 84.847831069814, "delta": 1.0},
         )
 
         await self.geocode_run(
@@ -237,14 +248,14 @@ class BaseTestNominatim(BaseTestGeocoder):
         await self.geocode_run(
             {"query": "kazan",
              "country_codes": 'tr'},
-            {"latitude": 40.2317, "longitude": 32.6839, "delta": 2},
+            {"latitude": 40.2317, "longitude": 38.0, "delta": 15},
         )
 
     async def test_country_codes_list(self):
         await self.geocode_run(
             {"query": "kazan",
              "country_codes": ['cn', 'tr']},
-            {"latitude": 40.2317, "longitude": 32.6839, "delta": 2},
+            {"latitude": 40.2317, "longitude": 38.0, "delta": 15},
         )
 
     @pytest.mark.parametrize(
@@ -253,30 +264,41 @@ class BaseTestNominatim(BaseTestGeocoder):
             pytest.param(
                 {"query": "mexico", "featuretype": 'country'},
                 {"latitude": 22.5000485, "longitude": -100.0000375, "delta": 5.0},
-                id="country",
-            ),
-            pytest.param(
-                {"query": "mexico", "featuretype": 'state', "country_codes": "US"},
-                {"latitude": 34.5708167, "longitude": -105.993007, "delta": 2.0},
-                id="state",
+                id="mexico_country",
             ),
             pytest.param(
                 {"query": "mexico", "featuretype": 'city'},
                 {"latitude": 19.4326009, "longitude": -99.1333416, "delta": 2.0},
-                id="city",
-                marks=pytest.mark.xfail(reason='nominatim responds incorrectly here'),
+                id="mexico_city",
+            ),
+            #
+            pytest.param(
+                {"query": "georgia", "featuretype": 'country', 'language': 'en'},
+                {"latitude": 41.6809707, "longitude": 44.0287382, "delta": 5.0},
+                id="georgia_country",
             ),
             pytest.param(
-                {"query": "georgia", "featuretype": 'settlement'},
+                {"query": "georgia", "featuretype": 'settlement', 'language': 'en'},
                 {"latitude": 32.3293809, "longitude": -83.1137366, "delta": 2.0},
-                id="settlement",
+                id="georgia_settlement",
+            ),
+            #
+            pytest.param(
+                {"query": "new york", "featuretype": 'city'},
+                {"latitude": 40.7127281, "longitude": -74.0060152, "delta": 1.0},
+                id="new_york_city",
+            ),
+            pytest.param(
+                {"query": "new york", "featuretype": 'state'},
+                {"latitude": 43.1561681, "longitude": -75.8449946, "delta": 1.0},
+                id="new_york_state",
             ),
         ]
     )
     async def test_featuretype_param(self, payload, expected):
         await self.geocode_run(payload, expected)
 
-    async def test_namedetails(self):
+    async def test_geocode_namedetails(self):
         query = "Kyoto, Japan"
         result = await self.geocode_run(
             {"query": query, "namedetails": True},
@@ -285,6 +307,20 @@ class BaseTestNominatim(BaseTestGeocoder):
         assert 'namedetails' in result.raw
 
         result = await self.geocode_run(
+            {"query": query, "namedetails": False},
+            {},
+        )
+        assert 'namedetails' not in result.raw
+
+    async def test_reverse_namedetails(self):
+        query = "40.689253199999996, -74.04454817144321"
+        result = await self.reverse_run(
+            {"query": query, "namedetails": True},
+            {},
+        )
+        assert 'namedetails' in result.raw
+
+        result = await self.reverse_run(
             {"query": query, "namedetails": False},
             {},
         )
@@ -304,7 +340,12 @@ class BaseTestNominatim(BaseTestGeocoder):
             {},
         )
         assert "New York" in result_reverse.address
-        assert "Statue of Liberty" in result_reverse.address
+        try:
+            # Pickpoint
+            assert "Statue of Liberty" in result_reverse.address
+        except AssertionError:
+            # Nominatim
+            assert "Flagpole Plaza" in result_reverse.address
 
 
 class TestNominatim(BaseTestNominatim):

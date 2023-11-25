@@ -3,6 +3,127 @@
 Changelog
 =========
 
+.. _v2-4-1:
+
+2.4.1
+-----
+2023-11-23
+
+Bugfixes
+~~~~~~~~
+
+- :class:`.Nominatim`: fix broken ``featuretype`` parameter. (:issue:`564`)
+
+
+.. _v2-4-0:
+
+2.4.0
+-----
+2023-08-27
+
+New Features
+~~~~~~~~~~~~
+
+- New geocoder: :class:`.Woosmap`.
+  Contributed by galela. (:issue:`541`)
+- New geocoder: :class:`.Geokeo`.
+  Contributed by Geokeo. (:issue:`490`)
+
+Breaking Changes
+~~~~~~~~~~~~~~~~
+
+- Removed Algolia Places geocoder: the service is shut down.
+  Contributed by mtmail. (:issue:`547`)
+
+Packaging Changes
+~~~~~~~~~~~~~~~~~
+
+- Add support for Python 3.12. (:issue:`559`)
+- Update maintainer email.
+- GitHub releases are now signed with GPG. (:issue:`550`)
+- tests: switch from httpbin.org to httpbingo.org. (:issue:`551`)
+- tests: use tox ``allowlist_externals`` instead of ``whitelist_externals``.
+  Contributed by galela. (:issue:`540`)
+
+Bugfixes
+~~~~~~~~
+
+- RequestsAdapter: use system CA store by default instead of ``certifi``.
+  (:issue:`558`)
+- :class:`.DataBC`: update service domain and endpoint.
+  Contributed by nickpcrogers. (:issue:`557`)
+
+Code Improvements
+~~~~~~~~~~~~~~~~~
+
+- Move hardcoded domains to ``__init__`` args for all geocoders.
+
+
+.. _v2-3-0:
+
+2.3.0
+-----
+2022-11-13
+
+New Features
+~~~~~~~~~~~~
+
+- :class:`.MapBox`: add ``referer`` param to allow restricted api_keys.
+  Contributed by Dennis Stritzke. (:issue:`501`)
+- :class:`.MapBox`: add ``language`` param to ``geocode``.
+  Contributed by Dennis Stritzke. (:issue:`503`)
+- :class:`.Distance`: add floor division + right multiplication
+  operators. (:issue:`485`)
+- :class:`.Distance`: make hashable. (:issue:`485`)
+- :class:`.Nominatim`: add ``namedetails`` param to ``reverse``. (:issue:`525`)
+- :class:`.Pelias`: add ``countries`` param to ``geocode``. (:issue:`504`)
+- :class:`.GoogleV3`: pass the original ``error_message`` to exceptions.
+  (:issue:`398`)
+
+Packaging Changes
+~~~~~~~~~~~~~~~~~
+
+- Drop support for Python 3.5 and 3.6.
+- Add support for Python 3.10 and 3.11.
+- Relax geographiclib upper version constraint to allow 2.x.
+  Contributed by David Hotham. (:issue:`520`)
+- Raise geographiclib lower version constraint to 1.52 to fix possible
+  :class:`ValueError` in :class:`.distance.geodesic` due to
+  the floating point inaccuracy. (:issue:`466`)
+- Move static metadata from ``setup.py`` to ``setup.cfg``.
+
+Deprecations
+~~~~~~~~~~~~
+
+- :class:`.Pelias`: deprecate ``country_bias`` param, use ``countries``
+  instead. (:issue:`504`)
+- :class:`.IGNFrance`: authentication is no longer accepted by the API,
+  so passing any credentials to the geocoder class has been deprecated.
+  These arguments should be removed. (:issue:`496`)
+
+Bugfixes
+~~~~~~~~
+
+- Fix possible :class:`TypeError` thrown by :class:`.RequestsAdapter`
+  on destruction. Contributed by Philip Kahn. (:issue:`488`)
+- :class:`.ArcGIS`: get address from LongLabel if Address is empty.
+- All geocoders: fix unexpected scientific point format for coordinates
+  near zero in reverse geocoding. (:issue:`511`)
+- :class:`.BANFrance`: fix broken reverse (it looks like their API has
+  changed in a backwards-incompatible way: the ``lng`` query arg has
+  been renamed to ``lon``).
+- :class:`.IGNFrance`: fix broken geocoder due to removal of
+  authentication in their API. (:issue:`496`)
+
+Docs Improvements
+~~~~~~~~~~~~~~~~~
+
+- Add url to the GIS Stack Exchange geopy tag.
+  Contributed by Taras Dubrava. (:issue:`516`).
+- :class:`.GeocodeEarth`: add docs and pricing urls.
+  Contributed by Julian Simioni. (:issue:`505`).
+
+
 .. _v2-2-0:
 
 2.2.0

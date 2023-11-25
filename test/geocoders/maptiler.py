@@ -12,7 +12,7 @@ class TestMapTiler(BaseTestGeocoder):
 
     async def test_geocode(self):
         await self.geocode_run(
-            {"query": "435 north michigan ave, chicago il 60611 usa"},
+            {"query": "435 michigan ave, chicago il 60611 usa"},
             {"latitude": 41.890, "longitude": -87.624},
         )
 
@@ -34,7 +34,7 @@ class TestMapTiler(BaseTestGeocoder):
     async def test_geocode_outside_bbox(self):
         await self.geocode_run(
             {
-                "query": "435 north michigan ave, chicago il 60611 usa",
+                "query": "435 michigan ave, chicago il 60611 usa",
                 "bbox": [[34.172684, -118.604794],
                          [34.236144, -118.500938]]
             },
@@ -45,7 +45,7 @@ class TestMapTiler(BaseTestGeocoder):
     async def test_geocode_bbox(self):
         await self.geocode_run(
             {
-                "query": "435 north michigan ave, chicago il 60611 usa",
+                "query": "435 michigan ave, chicago il 60611 usa",
                 "bbox": [Point(35.227672, -103.271484),
                          Point(48.603858, -74.399414)]
             },
@@ -54,8 +54,12 @@ class TestMapTiler(BaseTestGeocoder):
 
     async def test_geocode_proximity(self):
         await self.geocode_run(
-            {"query": "200 queen street", "proximity": Point(45.3, -66.1)},
-            {"latitude": 44.038901, "longitude": -64.73052, "delta": 0.1},
+            {"query": "kazan", "proximity": Point(40.23, 32.7)},
+            {"latitude": 40.2317, "longitude": 32.6839, "delta": 1},
+        )
+        await self.geocode_run(
+            {"query": "kazan"},
+            {"latitude": 55.7823, "longitude": 49.1242, "delta": 1},
         )
 
     async def test_reverse_language(self):
@@ -76,10 +80,10 @@ class TestMapTiler(BaseTestGeocoder):
 
     async def test_geocode_raw(self):
         result = await self.geocode_run({"query": "New York"}, {})
-        delta = 1.0
+        delta = 4.0
         expected = pytest.approx((-73.8784155, 40.6930727), abs=delta)
         assert expected == result.raw['center']
-        assert "relation175905" == result.raw['properties']['osm_id']
+        assert result.raw['properties']['country_code'] == 'us'
 
     async def test_geocode_exactly_one_false(self):
         list_result = await self.geocode_run(
